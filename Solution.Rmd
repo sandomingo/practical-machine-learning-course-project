@@ -1,0 +1,76 @@
+# Course Project
+In this project, our goal is to use data from accelermoeters on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. We will predict the manner in which they did the exercise.
+
+## About data
+The [training data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)  and the  [test data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)  for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+## Preprocess
+load the data and clean them.
+```{r cache=TRUE}
+rm(list=ls())
+data.training <- read.csv("pml-training.csv", header=T, stringsAsFactors=F)
+data.testing <- read.csv("pml-testing.csv", header=T, stringsAsFactors=F)
+# convert the predict variable "classe" to factor
+data.training$classe <- as.factor(data.training$classe)
+
+# remove columns that all values are NA in the data.testing
+feature.num <- dim(data.testing)[2]
+test.item.num <- dim(data.testing)[1]
+keep.cols <- c()
+for (i in 2:feature.num) { # exclude the first(X) feature
+  if (sum(is.na(data.testing[,i])) != test.item.num) {
+    keep.cols <- c(keep.cols, i)
+  }
+}
+data.training <- data.training[, keep.cols]
+data.testing <- data.testing[, keep.cols]
+# drop feature: raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp
+drop.cols <- c('raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp')
+data.training <- data.training[, !(names(data.training) %in% drop.cols)]
+data.testing <- data.testing[, !(names(data.testing) %in% drop.cols)]
+```
+
+## Split the data into training set and testing set
+We split the data to get a training set(60%) and a testing set(40%)
+```{r cache=TRUE}
+library(caret)
+set.seed(1024)
+inTrain <- createDataPartition(data.training$classe, p=0.6, list=F)
+training <- data.training[inTrain,]
+testing <- data.training[-inTrain,]
+```
+
+## Training a fit model
+We here using random forest with 3 times cross validation and then choose a best model.
+```{r echo=TRUE, cache=TRUE, warning=FALSE}
+set.seed(1024)
+ctrl <- trainControl(method='cv', repeats=5)
+modelFit <- train(classe ~ ., data = training, method='rf', trControl=ctrl)
+modelFit
+modelFit$finalModel
+```
+According the cross validation result, we choose the model which mtry=30. This model's in sample accuracy is almost 100%.
+
+## Out of sample error
+We using the 40% left testing set to calculate the out of sample error.
+```{r echo=TRUE, cache=TRUE, warning=FALSE}
+test.result <- predict(modelFit, newdata=testing)
+confusionMatrix(test.result, testing$classe)
+```
+The out of sample accuracy is 99.7%, which means the out of sample error is about 0.3%.
+
+## Predict the value
+Using the model to generate result of the 20 submit records.
+```{r}
+ans <- predict(modelFit, newdata=data.testing)
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(ans)
+```
